@@ -5,7 +5,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
-using TMPro; // Certifique-se de que esta linha está presente para TextMeshPro
+using UnityEngine.UI; // Adicionado para aceder a componentes de UI como 'Selectable'
+using TMPro;
 
 public class GameManager : MonoBehaviour
 {
@@ -19,7 +20,6 @@ public class GameManager : MonoBehaviour
     public PlayerController playerController;
     public Transform reviveSpawnPoint;
     
-    // NOVO CAMPO AQUI PARA O SEU TEXTO 3D
     [Header("Elementos de UI 3D")]
     public GameObject gameOver3DTextObject; // Arraste seu GameObject de Texto 3D de "Game Over" aqui
 
@@ -70,7 +70,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // Inscreve-se nos eventos quando o GameManager é ativado
     void OnEnable()
     {
         UIManager.OnWatchAdClicked += OnWatchAd;
@@ -80,7 +79,6 @@ public class GameManager : MonoBehaviour
         UIManager.OnShieldAdClicked += OnShieldAdClicked;
     }
 
-    // Cancela a inscrição para evitar erros quando a cena muda
     void OnDisable()
     {
         UIManager.OnWatchAdClicked -= OnWatchAd;
@@ -111,10 +109,8 @@ public class GameManager : MonoBehaviour
         UIManager.Instance.gameOverPanel.SetActive(false);
         UIManager.Instance.finalScoreText.gameObject.SetActive(false);
         
-        // Esconde o painel de "sem anúncios" no início
         if (UIManager.Instance.noAdsPanel != null) UIManager.Instance.noAdsPanel.SetActive(false);
         
-        // AGORA USAMOS A NOVA REFERÊNCIA DIRETAMENTE NO GAMEMANAGER
         if (gameOver3DTextObject != null) gameOver3DTextObject.SetActive(false);
 
         foreach (var d in UIManager.Instance.distanceDigits)
@@ -143,14 +139,39 @@ public class GameManager : MonoBehaviour
         {
             if (AnyStartInput())
             {
-                if (!EventSystem.current.IsPointerOverGameObject())
+                Vector2 clickPosition = Vector2.zero;
+                bool isPointerInput = false;
+
+                // Determina se foi um input de ponteiro (rato/toque) e obtém a sua posição
+                #if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
+                if (Mouse.current?.leftButton.wasPressedThisFrame == true) {
+                    clickPosition = Mouse.current.position.ReadValue();
+                    isPointerInput = true;
+                } else if (Touchscreen.current?.primaryTouch.press.wasPressedThisFrame == true) {
+                    clickPosition = Touchscreen.current.primaryTouch.position.ReadValue();
+                    isPointerInput = true;
+                }
+                #else
+                if (Input.GetMouseButtonDown(0)) {
+                    clickPosition = Input.mousePosition;
+                    isPointerInput = true;
+                } else if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) {
+                    clickPosition = Input.GetTouch(0).position;
+                    isPointerInput = true;
+                }
+                #endif
+
+                // Se foi um input de ponteiro, verifica a UI.
+                // Caso contrário (teclado), inicia o jogo diretamente.
+                if (isPointerInput)
                 {
-                    #if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
-                    if (Input.touchCount > 0 && EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId))
+                    if (!IsPointerOverInteractiveUI(clickPosition))
                     {
-                        return;
+                        StartGame();
                     }
-                    #endif
+                }
+                else // Foi um input de teclado
+                {
                     StartGame();
                 }
             }
@@ -176,6 +197,30 @@ public class GameManager : MonoBehaviour
             }
             nextMilestoneIndex++;
         }
+    }
+    
+    /// <summary>
+    /// Verifica se o ponteiro está sobre um elemento de UI interativo (como um botão).
+    /// </summary>
+    private bool IsPointerOverInteractiveUI(Vector2 screenPosition)
+    {
+        if (EventSystem.current == null) return false;
+
+        var eventData = new PointerEventData(EventSystem.current) { position = screenPosition };
+        var results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(eventData, results);
+
+        foreach (var result in results)
+        {
+            // Se o objeto tiver um componente "Selectable" (Button, Slider, Toggle, etc.),
+            // significa que é interativo.
+            if (result.gameObject.GetComponent<Selectable>() != null)
+            {
+                return true; // Clique foi sobre UI interativa, então bloqueia.
+            }
+        }
+
+        return false; // Clique não foi sobre UI interativa.
     }
 
     private void OnShieldAdClicked()
@@ -332,7 +377,6 @@ public class GameManager : MonoBehaviour
         int finalScore = Mathf.FloorToInt(distanceTravelled);
         UIManager.Instance.finalScoreText.text = finalScore.ToString();
 
-        // AGORA USAMOS A NOVA REFERÊNCIA DIRETAMENTE NO GAMEMANAGER
         if (gameOver3DTextObject != null)
             gameOver3DTextObject.SetActive(true);
         

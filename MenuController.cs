@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using TMPro;
-using UnityEngine.UI;             
+using UnityEngine.UI; 
 #if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
 using UnityEngine.InputSystem;
 #endif
@@ -14,9 +14,9 @@ public class MenuController : MonoBehaviour
     [Tooltip("Nomes exatos das cenas de cenário (Build Settings)")]
     public string[] scenarioScenes;
 
-    [Header("UI Ignorada (decorativa)")]
-    [Tooltip("UI Elements que serão ignorados na detecção de clique")]
-    public GameObject[] uiIgnoreList;
+    [Header("Painéis de UI")]
+    [Tooltip("Arraste para aqui o seu painel de Opções/Settings")]
+    public GameObject settingsPanel; // NOVA REFERÊNCIA
 
     [Header("Recorde")]
     [Tooltip("Texto que exibirá o recorde salvo")]
@@ -26,13 +26,11 @@ public class MenuController : MonoBehaviour
 
     void OnEnable()
     {
-        // Toda vez que o menu ficar ativo, recarrega o recorde
         UpdateRecordText();
     }
 
     void Start()
     {
-        // Também no Start (caso seja a primeira ativação)
         UpdateRecordText();
     }
 
@@ -51,17 +49,17 @@ public class MenuController : MonoBehaviour
     {
         if (hasLoaded) return;
 
+        // *** ALTERAÇÃO PRINCIPAL AQUI ***
+        // Se o painel de opções estiver ativo, o script não faz mais nada.
+        if (settingsPanel != null && settingsPanel.activeInHierarchy)
+        {
+            return;
+        }
+
         if (ClickDetected(out Vector2 screenPos))
         {
-            // Debug.Log($"[MenuController] Clique detectado em {screenPos}");
-
-            if (IsPointerOverUI(screenPos, out string uiName))
+            if (!IsPointerOverInteractiveUI(screenPos))
             {
-                // Debug.Log($"[MenuController] Clique sobre UI \"{uiName}\" – ignorando");
-            }
-            else
-            {
-                // Debug.Log("[MenuController] Clique fora da UI relevante – carregando cenário aleatório");
                 LoadRandomScenario();
                 hasLoaded = true;
             }
@@ -93,12 +91,10 @@ public class MenuController : MonoBehaviour
         return false;
     #endif
     }
-
-    private bool IsPointerOverUI(Vector2 screenPosition, out string clickedUIName)
+    
+    private bool IsPointerOverInteractiveUI(Vector2 screenPosition)
     {
-        clickedUIName = null;
-        if (EventSystem.current == null)
-            return false;
+        if (EventSystem.current == null) return false;
 
         var eventData = new PointerEventData(EventSystem.current) { position = screenPosition };
         var results = new List<RaycastResult>();
@@ -106,21 +102,10 @@ public class MenuController : MonoBehaviour
 
         foreach (var result in results)
         {
-            var go = result.gameObject;
-            clickedUIName = go.name;
-
-            // Se for parte de uma UI ignorada, continue procurando
-            bool isIgnored = false;
-            foreach (var ignoreGO in uiIgnoreList)
+            if (result.gameObject.GetComponent<Selectable>() != null)
             {
-                if (ignoreGO != null && (go == ignoreGO || go.transform.IsChildOf(ignoreGO.transform)))
-                {
-                    isIgnored = true;
-                    break;
-                }
+                return true;
             }
-            if (!isIgnored)
-                return true; // clique sobre UI relevante
         }
 
         return false;
@@ -135,8 +120,14 @@ public class MenuController : MonoBehaviour
         }
         int idx = Random.Range(0, scenarioScenes.Length);
         string sceneName = scenarioScenes[idx];
-        // Debug.Log($"[MenuController] Carregando cena '{sceneName}' (índice {idx})");
-        FadeManager.Instance.FadeToScene(sceneName);
+        
+        if (FadeManager.Instance != null)
+        {
+            FadeManager.Instance.FadeToScene(sceneName);
+        }
+        else
+        {
+            SceneManager.LoadScene(sceneName);
+        }
     }
-
 }
